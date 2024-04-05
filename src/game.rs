@@ -8,6 +8,8 @@ use crate::snake::{Direction,Snake};
 const BORDER_COLOR:Color = [0.5,0.0,0.0,1.0];
 const FOOD_COLOR:Color = [0.8,0.0,0.0,1.0];
 const MOVIN_PERIOD:f64 = 0.2;
+const GAMEOVER_COLOR:Color = [0.9,0.0,0.0,0.5];
+const RESTART_TIME:f64 = 1.0;
 
 
 pub struct Game{
@@ -21,6 +23,8 @@ pub struct Game{
     width:i32,
     height:i32,
     waiting_time:f64,
+
+    game_over: bool,
 }
 
 impl Game{
@@ -32,9 +36,14 @@ impl Game{
             food_y:0,
             width,height,
             waiting_time:0.0,
+            game_over:false,
         }
     }
     pub fn key_pressed(&mut self,key:Key){
+        if self.game_over ==true{
+            return ;
+
+        }
         let dir = match key{
             Key::Up=>Some(Direction::Up),
             Key::Down=>Some(Direction::Down),
@@ -58,11 +67,19 @@ impl Game{
         draw_rectangle(BORDER_COLOR, 0, 0, self.width, 1, con, g);
         draw_rectangle(BORDER_COLOR, 0, self.height-1, self.width, 1, con, g);
         draw_rectangle(BORDER_COLOR, 0, 0, 1, self.height, con, g);
-        draw_rectangle(BORDER_COLOR, self.width-1, 0, 1, self.height, con, g)
-
+        draw_rectangle(BORDER_COLOR, self.width-1, 0, 1, self.height, con, g);
+        if self.game_over == true{
+            draw_rectangle(GAMEOVER_COLOR, 0, 0, self.width, self.height, con, g)
+        }
     }
 
     pub fn update(&mut self,delta_time:f64){
+        if self.game_over==true{
+            if self.waiting_time>RESTART_TIME{
+                self.restart()
+            }
+            return;
+        }
         self.waiting_time += delta_time;
 
         if !self.food_exists{
@@ -82,11 +99,24 @@ impl Game{
             self.snake.restore_tail();
         }
     }
+    fn check_snake_alive(&self,dir:Option<Direction>)->bool{
+        let (next_x,next_y) = self.snake.next_head(dir);
+        if self.snake.overlap_tail(next_x, next_y){
+            return false;
+        }
+        next_x > 0 && next_y>0 && next_x<self.width-1 && next_y < self.height-1
+    }
     fn add_food(&mut self){
         let mut rng = thread_rng();
-        let new_x = rng.gen_range(1..self.width-1);
-        let new_y = rng.gen_range(1..self.height-1);
-        
+        let mut new_x = rng.gen_range(1..self.width-1);
+        let mut new_y = rng.gen_range(1..self.height-1);
+
+        while self.snake.overlap_tail(new_x, new_y){
+            new_x = rng.gen_range(1..self.width-1);
+            new_y = rng.gen_range(1..self.height-1);
+        }
+
+
         self.food_x = new_x;
         self.food_y = new_y;
 
@@ -94,8 +124,22 @@ impl Game{
     }
 
     fn update_snake(&mut self, dir:Option<Direction>){
-        self.snake.move_forward(dir);
+        if self.check_snake_alive(dir){
+            self.snake.move_forward(dir);
         self.check_eating();
+        }
+        else{
+            self.game_over = true;
+        }
+        
         self.waiting_time = 0.0;
+    }
+    fn restart(&mut self){
+        self.snake = Snake::new(2, 2);
+        self.waiting_time = 0.0;
+        self.food_exists = true;
+        self.food_x = 0;
+        self.food_y = 0;
+        self.game_over = false;
     }
 }
